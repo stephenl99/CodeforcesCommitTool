@@ -1,9 +1,3 @@
-let justSubmitted = false;
-let WAIT_TIME = 500;
-let TIMEOUT = 5000; // Increase timeout to 10 seconds
-let initialResultText = null; // Track the initial state
-let problemNumber = null;
-
 let gitHubUsername = null;
 let repo = null;
 let gitHubToken = null;
@@ -41,7 +35,6 @@ function isExtensionContextValid() {
 }
 
 function showNotification(message, type = 'info') {
-    // Create notification element
     const notification = document.createElement('div');
     notification.style.cssText = `
         position: fixed;
@@ -60,10 +53,8 @@ function showNotification(message, type = 'info') {
     `;
     notification.textContent = message;
     
-    // Add to page
     document.body.appendChild(notification);
     
-    // Remove after 3 seconds
     setTimeout(() => {
         if (notification.parentNode) {
             notification.parentNode.removeChild(notification);
@@ -90,7 +81,7 @@ function loadCredentials() {
                 
                 if (result.githubUsername && result.githubToken) {
                     gitHubUsername = result.githubUsername;
-                    repo = result.githubRepo || 'Leetcode';
+                    repo = result.githubRepo || 'Codeforces';
                     gitHubToken = result.githubToken;
                     console.log('Credentials loaded successfully');
                     resolve(true);
@@ -107,206 +98,20 @@ function loadCredentials() {
     });
 }
 
-
-function updateProblemNumber() {
-    const titleElement = document.querySelector("a.no-underline.hover\\:text-blue-s");
-    const title = titleElement?.innerText;
-    const newProblemNumber = title ? title.split('.')[0].trim() : null;
-    
-    if (newProblemNumber !== problemNumber) {
-        problemNumber = newProblemNumber;
-        console.log("Problem Number updated:", problemNumber);
-    }
-}
-
-function startProblemNumberMonitor() {
-    // Update immediately
-    updateProblemNumber();
-    
-    // Set up observer to watch for changes in the problem title
-    const observer = new MutationObserver(() => {
-        updateProblemNumber();
-    });
-    
-    observer.observe(document.body, { 
-        childList: true, 
-        subtree: true 
-    });
-    
-    // Also check periodically as a backup
-    setInterval(updateProblemNumber, 1000);
-}
-
-function trackSubmitButton() {
-  return new Promise((resolve) => {
-    // Capture the initial state of any existing result
-    const existingResult = document.querySelector('span[data-e2e-locator="submission-result"]');
-    initialResultText = existingResult ? existingResult.innerText.trim() : null;
-    console.log("Initial result state:", initialResultText);
-
-    const observer = new MutationObserver(() => {
-      const submitButton = document.querySelector(
-        'button[data-e2e-locator="console-submit-button"]'
-      );
-
-      if (submitButton && !submitButton.dataset.listenerAttached) {
-        submitButton.addEventListener("click", () => {
-          justSubmitted = true;
-          console.log("Submit clicked, waiting for submission to start processing...");
-          
-          // Wait for the submission to actually start processing
-          waitForSubmissionToStart();
-        });
-        submitButton.dataset.listenerAttached = "true";
-        resolve();
-      }
-    });
-
-    observer.observe(document.body, { childList: true, subtree: true });
-  });
-}
-
-function waitForSubmissionToStart() {
-    if (!justSubmitted) {
-        return;
-    }
-    
-    console.log("Waiting for submission to start...");
-    
-    // Get the current result text to compare against
-    const initialResult = document.querySelector('span[data-e2e-locator="submission-result"]');
-    const initialText = initialResult ? initialResult.innerText.trim() : "";
-    
-    console.log("Initial result before submission:", initialText);
-    
-    const targetNode = document.body;
-    const config = {
-        childList: true,
-        subtree: true,
-    };
-    
-    const observer = new MutationObserver(() => {
-        const resultSpan = document.querySelector('span[data-e2e-locator="submission-result"]');
-        
-        if (resultSpan) {
-            const currentText = resultSpan.innerText.trim();
-            
-            // Check if the submission has started processing
-            // This happens when the text changes from the initial state to something indicating processing
-            if (currentText !== initialText) {
-                
-                console.log("Submission started processing! Current text:", currentText);
-                observer.disconnect();
-                clearTimeout(startTimeoutId);
-                
-                // Now wait for the actual result
-                waitForAcceptedSubmission();
-            }
-        }
-    });
-    
-    observer.observe(targetNode, config);
-    
-    // Timeout for waiting for submission to start
-    const startTimeoutId = setTimeout(() => {
-        console.log(`Waited ${WAIT_TIME}ms for submission start detection. Now watching for Accepted result...`);
-        observer.disconnect();
-        
-        // Proceed to watch for results
-        waitForAcceptedSubmission();
-    }, WAIT_TIME);
-}
-
-function waitForAcceptedSubmission() {
-    if (!justSubmitted) {
-        return;
-    }
-    
-    console.log("Now watching for Accepted result...");
-    
-    const targetNode = document.body;
-    const config = {
-        childList: true,
-        subtree: true,
-    };
-    
-    const observer = new MutationObserver(() => {
-        const resultSpan = document.querySelector('span[data-e2e-locator="submission-result"]');
-        
-        if (resultSpan) {
-            const currentText = resultSpan.innerText.trim();
-            console.log("Result update:", currentText);
-            
-            if (currentText === "Accepted") {
-                console.log("NEW LeetCode submission was accepted!");
-                observer.disconnect();
-                clearTimeout(timeoutId);
-                justSubmitted = false;
-                handleAcceptedSubmission();
-            }
-        }
-    });
-    
-    observer.observe(targetNode, config);
-    
-    const timeoutId = setTimeout(() => {
-        console.log("Timed out waiting for Accepted result. Stopping observer.");
-        observer.disconnect();
-        justSubmitted = false;
-    }, TIMEOUT);
-}
-
-async function handleAcceptedSubmission() {
-    // Check if credentials are loaded
+async function uploadToGitHub(filename, code, commitMsg, sha = null) {
     if (!gitHubUsername || !gitHubToken) {
         const hasCredentials = await loadCredentials();
         if (!hasCredentials) {
             console.log('❌ No GitHub credentials found. Please set up your credentials in the extension popup.');
-            return;
+            showNotification('❌ Please configure GitHub credentials in extension popup', 'error');
+            return false;
         }
     }
     
-    const url = window.location.href;
-    const splitUrl = url.split("/");
-    const problemId = formatProblemId(splitUrl[4]);
-    console.log("Problem ID:", problemId);
-    
-    const codeMirror = document.querySelector(".monaco-editor");
-    
-    // Better code extraction for Monaco editor
-    let code = "[Unable to extract code]";
-    if (codeMirror) {
-        // Get all code elements and extract text content
-        const codeElements = document.getElementsByTagName('code');
-        if (codeElements.length > 0) {
-            code = codeElements[codeElements.length - 1].textContent || codeElements[codeElements.length - 1].innerText;
-            console.log("Extracted from code tags:", code.length, "characters");
-        }
-    }
-    
-    // Find the language selector button (contains language name + chevron icon)
-    let langButton = document.querySelector("button[aria-haspopup='dialog'][class*='rounded'][class*='items-center']");
-    let lang = langButton?.innerText?.replace(/\s*$/, '') || null; // Remove trailing whitespace/icons
-
-    console.log("Problem:", problemId);
-    console.log("Problem Number:", problemNumber);
-    console.log("Language:", lang);
-    console.log("Code:\n", code);
-
-    let commitMsg = `Add LeetCode solution: ${problemNumber}. ${problemId}`;
-    let sha = null;
-    
-    // Create filename - handle null problemNumber
-    const safeProblemNumber = problemNumber || 'unknown';
-    const filename = `${safeProblemNumber}-${problemId.toLowerCase().replace(/\s+/g, '-')}.${getFileExtension(lang)}`;
-
-    // Convert code to base64 for GitHub API
     const base64Code = btoa(unescape(encodeURIComponent(code)));
-    console.log("Base64 encoded:", base64Code);
-
-    // Get existing file SHA if it exists
+    
+    // Check if file exists
     try {
-        console.log('Checking for existing file:', filename);
         const response = await fetch(`https://api.github.com/repos/${gitHubUsername}/${repo}/contents/${filename}`, {
             method: 'GET',
             headers: {
@@ -315,17 +120,13 @@ async function handleAcceptedSubmission() {
             }
         });
         
-        console.log('GET response status:', response.status);
-        
         if (response.ok) {
             const fileData = await response.json();
             sha = fileData.sha;
-            console.log('Found existing file, SHA:', sha);
             
-            // Ask user if they want to overwrite existing solution
             const shouldOverwrite = confirm(
                 `🔄 Overwrite Existing Solution?\n\n` +
-                `A solution for "${problemId}" already exists in your GitHub repository.\n\n` +
+                `A solution for "${filename}" already exists in your GitHub repository.\n\n` +
                 `Do you want to overwrite it with your new submission?\n\n` +
                 `✅ Click OK to overwrite\n` +
                 `❌ Click Cancel to skip`
@@ -334,24 +135,26 @@ async function handleAcceptedSubmission() {
             if (!shouldOverwrite) {
                 console.log('User chose not to overwrite existing solution. Skipping upload.');
                 showNotification('⏭️ Skipped upload - existing solution preserved', 'info');
-                return;
+                return false;
             }
             
             showNotification('🔄 Overwriting existing solution...', 'info');
         } else if (response.status === 404) {
             console.log('File does not exist (404), creating new file');
             showNotification('📝 Creating new solution file...', 'info');
-        } else {
-            console.log('Unexpected response status:', response.status);
         }
-        
-        // Send to background script to avoid CORS
-        if (!isExtensionContextValid()) {
-            console.error('❌ Extension context invalidated. Please reload the page and try again.');
-            return;
-        }
-        
-        try {
+    } catch (error) {
+        console.log('Error checking for existing file:', error);
+    }
+    
+    // Send to background script to avoid CORS
+    if (!isExtensionContextValid()) {
+        console.error('❌ Extension context invalidated. Please reload the page and try again.');
+        return false;
+    }
+    
+    try {
+        return new Promise((resolve) => {
             chrome.runtime.sendMessage({
                 action: 'uploadToGitHub',
                 data: {
@@ -360,48 +163,416 @@ async function handleAcceptedSubmission() {
                     username: gitHubUsername,
                     token: gitHubToken,
                     commitMsg: commitMsg,
-                    sha: sha
+                    sha: sha,
+                    repo: repo
                 }
             }, (response) => {
                 if (chrome.runtime.lastError) {
                     console.error('❌ Extension context error:', chrome.runtime.lastError.message);
                     console.log('Please reload the page and try again.');
+                    showNotification('❌ Extension error - please reload page', 'error');
+                    resolve(false);
                     return;
                 }
                 
                 if (response && response.success) {
                     console.log('✅ GitHub upload successful:', response.result);
                     showNotification('✅ Solution saved to GitHub successfully!', 'success');
+                    resolve(true);
                 } else if (response) {
                     console.error('❌ GitHub upload failed:', response.error);
                     showNotification('❌ Failed to save solution to GitHub', 'error');
+                    resolve(false);
                 } else {
                     console.error('❌ No response from background script');
                     showNotification('❌ No response from extension', 'error');
+                    resolve(false);
                 }
             });
-        } catch (runtimeError) {
-            console.error('❌ Runtime error:', runtimeError.message);
-            console.log('Extension may need to be reloaded. Please refresh the page.');
-        }
-    } catch (error) {
-        console.log('Error getting SHA:', error);
+        });
+    } catch (runtimeError) {
+        console.error('❌ Runtime error:', runtimeError.message);
+        console.log('Extension may need to be reloaded. Please refresh the page.');
+        showNotification('❌ Runtime error - please reload page', 'error');
+        return false;
     }
-
-
 }
 
-// Initialize when on a LeetCode problem page
-if (window.location.href.includes("leetcode.com/problems/")) {
-    // Load credentials on startup
-    loadCredentials().then((hasCredentials) => {
-        if (hasCredentials) {
-            console.log('✅ Extension ready with GitHub credentials');
-        } else {
-            console.log('⚠️ Extension loaded but no GitHub credentials found');
+// Submission detection and management
+let submissionObserver = null;
+let lastProcessedSubmissionId = 0; // Track last processed submission ID
+
+// Load last processed submission ID from storage
+async function loadLastProcessedSubmissionId() {
+    return new Promise((resolve) => {
+        chrome.storage.local.get(['lastProcessedSubmissionId'], (result) => {
+            if (result.lastProcessedSubmissionId) {
+                lastProcessedSubmissionId = result.lastProcessedSubmissionId;
+            }
+            resolve();
+        });
+    });
+}
+
+// Save last processed submission ID
+async function saveLastProcessedSubmissionId(submissionId) {
+    lastProcessedSubmissionId = submissionId;
+    chrome.storage.local.set({ lastProcessedSubmissionId: submissionId });
+}
+
+// Check for new submissions on the contest submissions page
+function checkForNewSubmissions() {
+    // Check if we're on the right page
+    if (!window.location.href.includes('/my') || !window.location.href.includes('/contest/')) {
+        return false;
+    }
+    
+    // Check if there's a div with text " My Submissions "
+    const mySubmissionsDiv = Array.from(document.querySelectorAll('div')).find(div => 
+        div.textContent && div.textContent.trim() === 'My Submissions'
+    );
+    
+    if (!mySubmissionsDiv) {
+        console.log('No " My Submissions " div found');
+        return false;
+    }
+    
+    // Check if there's a table with class status-frame-datatable
+    const submissionsTable = document.querySelector('table.status-frame-datatable');
+    if (!submissionsTable) {
+        return false;
+    }
+    
+    // Get the first row with class highlighted-row
+    const firstHighlightedRow = submissionsTable.querySelector('tr.highlighted-row');
+    if (!firstHighlightedRow) {
+        return false;
+    }
+    
+    // Get the data-submission-id from the first highlighted row
+    const submissionId = firstHighlightedRow.getAttribute('data-submission-id');
+    if (!submissionId) {
+        return false;
+    }
+    
+    // Get the current submission ID
+    const currentSubmissionId = parseInt(submissionId, 10);
+    
+    // Check if the current submission ID is greater than the last processed
+    if (currentSubmissionId > lastProcessedSubmissionId) {
+        console.log(`✅ NEW SUBMISSION DETECTED!`);
+        console.log(`   Last processed: ${lastProcessedSubmissionId}`);
+        console.log(`   Current submission ID: ${currentSubmissionId}`);
+        console.log(`   Submission row:`, firstHighlightedRow);
+        return true;
+    }
+    
+    return false;
+}
+
+async function fetchLatestSubmissions(count = 10) {
+    try {
+        // Get Codeforces handle from the page
+        const handleElement = document.querySelector('.lang-chooser a[href*="/profile/"]');
+        if (!handleElement) {
+            console.log('Could not find Codeforces handle on page');
+            return null;
+        }
+        
+        const handle = handleElement.textContent.trim();
+        console.log('Found handle:', handle);
+        
+        // Fetch latest submissions from Codeforces API
+        const response = await fetch(`https://codeforces.com/api/user.status?handle=${handle}&from=1&count=${count}`);
+        if (!response.ok) {
+            throw new Error(`Codeforces API error: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        if (data.status !== 'OK') {
+            throw new Error(`Codeforces API error: ${data.comment || 'Unknown error'}`);
+        }
+        
+        // Filter for accepted submissions only
+        const acceptedSubmissions = data.result.filter(sub => 
+            sub.verdict === 'OK' || sub.verdict === 'ACCEPTED'
+        );
+        
+        return acceptedSubmissions.slice(0, count);
+    } catch (error) {
+        console.error('Error fetching submissions:', error);
+        showNotification('❌ Failed to fetch submissions from Codeforces', 'error');
+        return null;
+    }
+}
+
+async function fetchSubmissionCode(submissionId) {
+    try {
+        // Navigate to submission page to get code
+        const submissionUrl = `https://codeforces.com/contest/${submissionId.split('/')[0]}/submission/${submissionId.split('/')[1]}`;
+        const response = await fetch(submissionUrl);
+        const html = await response.text();
+        
+        // Parse code from the page (this is a simplified version)
+        // In practice, you might need to use the Codeforces API or parse the HTML more carefully
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const codeElement = doc.querySelector('#program-source-text, .prettyprint');
+        
+        if (codeElement) {
+            return codeElement.textContent;
+        }
+        
+        // Alternative: Use Codeforces API if available
+        // For now, we'll need to extract from the submission page
+        return null;
+    } catch (error) {
+        console.error('Error fetching submission code:', error);
+        return null;
+    }
+}
+
+function showSolutionSelectionModal(submissions) {
+    // Create modal overlay
+    const modal = document.createElement('div');
+    modal.id = 'cf-solution-selector-modal';
+    modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        z-index: 100000;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-family: Arial, sans-serif;
+    `;
+    
+    // Create modal content
+    const content = document.createElement('div');
+    content.style.cssText = `
+        background: white;
+        padding: 30px;
+        border-radius: 8px;
+        max-width: 600px;
+        max-height: 80vh;
+        overflow-y: auto;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    `;
+    
+    content.innerHTML = `
+        <h2 style="margin-top: 0; color: #333;">Select Solutions to Upload</h2>
+        <p style="color: #666; margin-bottom: 20px;">Choose which solutions you'd like to upload to GitHub:</p>
+        <div id="submission-list" style="margin-bottom: 20px;"></div>
+        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+            <button id="cancel-upload" style="padding: 10px 20px; background: #ccc; border: none; border-radius: 4px; cursor: pointer;">Cancel</button>
+            <button id="confirm-upload" style="padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Upload Selected</button>
+        </div>
+    `;
+    
+    modal.appendChild(content);
+    document.body.appendChild(modal);
+    
+    // Populate submission list
+    const listContainer = content.querySelector('#submission-list');
+    const selectedSubmissions = new Set();
+    
+    submissions.forEach((sub, index) => {
+        const submissionDiv = document.createElement('div');
+        submissionDiv.style.cssText = `
+            padding: 15px;
+            margin-bottom: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        `;
+        
+        const problemName = sub.problem.name || `Problem ${sub.problem.index}`;
+        const contestId = sub.contestId || 'Unknown';
+        const submissionId = sub.id;
+        const language = sub.programmingLanguage || 'Unknown';
+        const submissionTime = new Date(sub.creationTimeSeconds * 1000).toLocaleString();
+        
+        submissionDiv.innerHTML = `
+            <label style="display: flex; align-items: center; cursor: pointer; width: 100%;">
+                <input type="checkbox" style="margin-right: 10px; width: 18px; height: 18px;" 
+                       data-submission-id="${submissionId}"
+                       data-contest-id="${contestId}"
+                       data-problem-name="${problemName}"
+                       data-language="${language}">
+                <div style="flex: 1;">
+                    <div style="font-weight: bold; color: #333; margin-bottom: 5px;">${problemName}</div>
+                    <div style="font-size: 12px; color: #666;">
+                        Contest ${contestId} • ${language} • ${submissionTime}
+                    </div>
+                </div>
+            </label>
+        `;
+        
+        const checkbox = submissionDiv.querySelector('input[type="checkbox"]');
+        checkbox.addEventListener('change', (e) => {
+            if (e.target.checked) {
+                selectedSubmissions.add(sub);
+                submissionDiv.style.borderColor = '#4CAF50';
+                submissionDiv.style.background = '#f0f8f0';
+            } else {
+                selectedSubmissions.delete(sub);
+                submissionDiv.style.borderColor = '#e0e0e0';
+                submissionDiv.style.background = 'white';
+            }
+        });
+        
+        submissionDiv.addEventListener('click', (e) => {
+            if (e.target.type !== 'checkbox') {
+                checkbox.checked = !checkbox.checked;
+                checkbox.dispatchEvent(new Event('change'));
+            }
+        });
+        
+        listContainer.appendChild(submissionDiv);
+    });
+    
+    // Handle cancel
+    content.querySelector('#cancel-upload').addEventListener('click', () => {
+        document.body.removeChild(modal);
+    });
+    
+    // Handle confirm
+    content.querySelector('#confirm-upload').addEventListener('click', async () => {
+        if (selectedSubmissions.size === 0) {
+            showNotification('Please select at least one solution', 'error');
+            return;
+        }
+        
+        content.querySelector('#confirm-upload').disabled = true;
+        content.querySelector('#confirm-upload').textContent = 'Uploading...';
+        
+        // Upload each selected submission
+        for (const sub of selectedSubmissions) {
+            await uploadSubmissionToGitHub(sub);
+        }
+        
+        document.body.removeChild(modal);
+        showNotification(`✅ Uploaded ${selectedSubmissions.size} solution(s) to GitHub!`, 'success');
+    });
+}
+
+async function uploadSubmissionToGitHub(submission) {
+    // Fetch the actual code for this submission
+    const code = await fetchSubmissionCodeFromAPI(submission);
+    if (!code) {
+        console.error('Could not fetch code for submission:', submission.id);
+        return false;
+    }
+    
+    const problemName = submission.problem.name || `Problem${submission.problem.index}`;
+    const contestId = submission.contestId;
+    const language = submission.programmingLanguage;
+    
+    // Format filename
+    const sanitizedProblemName = problemName.replace(/[^a-zA-Z0-9]/g, '_');
+    const extension = getFileExtension(language);
+    const filename = `${contestId}_${sanitizedProblemName}.${extension}`;
+    
+    // Create commit message
+    const commitMsg = `Add solution for ${problemName} (Contest ${contestId})`;
+    
+    // Upload to GitHub
+    const success = await uploadToGitHub(filename, code, commitMsg);
+    
+    // Mark submission as processed if upload was successful
+    if (success) {
+        await saveLastProcessedSubmissionId(submission.id);
+    }
+    
+    return success;
+}
+
+async function fetchSubmissionCodeFromAPI(submission) {
+    try {
+        // Codeforces doesn't have a public API for submission source code
+        // We need to fetch it from the submission page
+        const contestId = submission.contestId;
+        const submissionId = submission.id;
+        const submissionUrl = `https://codeforces.com/contest/${contestId}/submission/${submissionId}`;
+        
+        // Use background script to fetch (to avoid CORS)
+        return new Promise((resolve) => {
+            chrome.runtime.sendMessage({
+                action: 'fetchSubmissionCode',
+                url: submissionUrl
+            }, (response) => {
+                if (response && response.success) {
+                    resolve(response.code);
+                } else {
+                    resolve(null);
+                }
+            });
+        });
+    } catch (error) {
+        console.error('Error fetching submission code:', error);
+        return null;
+    }
+}
+
+function startSubmissionMonitoring() {
+    // Monitor for new submissions using MutationObserver
+    submissionObserver = new MutationObserver((mutations) => {
+        if (checkForNewSubmissions()) {
+            // New submission detected - print message (you'll decide what to do next)
+            const firstHighlightedRow = document.querySelector('table.status-frame-datatable tr.highlighted-row');
+            const submissionId = firstHighlightedRow.getAttribute('data-submission-id');
+            console.log('🎯 NEW SUBMISSION FOUND - Ready for next steps!');
+            console.log(`   Submission ID: ${submissionId}`);
         }
     });
     
-    startProblemNumberMonitor();
-    trackSubmitButton();
+    // Start observing
+    submissionObserver.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['class', 'data-submission-id']
+    });
+    
+    // Also check on page load/navigation
+    const checkOnLoad = () => {
+        setTimeout(() => {
+            if (checkForNewSubmissions()) {
+                const firstHighlightedRow = document.querySelector('table.status-frame-datatable tr.highlighted-row');
+                const submissionId = firstHighlightedRow.getAttribute('data-submission-id');
+                console.log('🎯 NEW SUBMISSION FOUND - Ready for next steps!');
+                console.log(`   Submission ID: ${submissionId}`);
+            }
+        }, 2000);
+    };
+    
+    checkOnLoad();
+    
+    // Monitor URL changes (for SPA navigation)
+    let lastUrl = location.href;
+    new MutationObserver(() => {
+        const url = location.href;
+        if (url !== lastUrl) {
+            lastUrl = url;
+            checkOnLoad();
+        }
+    }).observe(document, { subtree: true, childList: true });
+}
+
+// Initialize when on Codeforces
+if (window.location.href.includes("codeforces.com")) {
+    loadLastProcessedSubmissionId().then(() => {
+        loadCredentials().then((hasCredentials) => {
+            if (hasCredentials) {
+                console.log('✅ Extension ready with GitHub credentials');
+                startSubmissionMonitoring();
+            } else {
+                console.log('⚠️ Extension loaded but no GitHub credentials found');
+            }
+        });
+    });
 }

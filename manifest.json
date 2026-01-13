@@ -1,10 +1,10 @@
 {
 "manifest_version": 3,
-"name": "Leetcode to Github Extension",
-"description": "This extension turns every Leetcode submission you make into a Github file",
-"version": "1.0",
+"name": "Codeforces to Github Extension",
+"description": "This extension turns every Codeforces submission you make into a Github file",
+"version": "1.1",
 "permissions": ["activeTab", "storage"],
-"host_permissions": ["https://api.github.com/*", "https://github.com/*"],
+"host_permissions": ["https://api.github.com/*", "https://github.com/*", "https://codeforces.com/*"],
 "background": {
     "service_worker": "background.js"
 },
@@ -14,7 +14,7 @@
 },
 "content_scripts": [
 {
-    "matches": ["https://leetcode.com/problems/*"],
+    "matches": ["https://codeforces.com/*"],
     "js": ["helpers.js", "content.js"],
     "run_at": "document_idle"
 }
