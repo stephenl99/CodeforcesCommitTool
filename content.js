@@ -1,6 +1,7 @@
 let gitHubUsername = null;
 let repo = null;
 let gitHubToken = null;
+let handle = null; // Codeforces handle
 
 function getFileExtension(language) {
     const extensions = {
@@ -71,7 +72,7 @@ function loadCredentials() {
         }
         
         try {
-            chrome.storage.sync.get(['githubUsername', 'githubRepo', 'githubToken'], function(result) {
+            chrome.storage.sync.get(['githubUsername', 'githubRepo', 'githubToken', 'codeforcesHandle'], function(result) {
                 if (chrome.runtime.lastError) {
                     console.error('❌ Extension context error loading credentials:', chrome.runtime.lastError.message);
                     console.log('Please reload the page and try again.');
@@ -79,14 +80,16 @@ function loadCredentials() {
                     return;
                 }
                 
-                if (result.githubUsername && result.githubToken) {
+                if (result.githubUsername && result.githubToken && result.codeforcesHandle) {
                     gitHubUsername = result.githubUsername;
                     repo = result.githubRepo || 'Codeforces';
                     gitHubToken = result.githubToken;
+                    handle = result.codeforcesHandle;
                     console.log('Credentials loaded successfully');
+                    console.log('Codeforces handle:', handle);
                     resolve(true);
                 } else {
-                    console.log('No credentials found. Please set up your GitHub credentials in the extension popup.');
+                    console.log('No credentials found. Please set up your GitHub credentials and Codeforces handle in the extension popup.');
                     resolve(false);
                 }
             });
@@ -540,12 +543,22 @@ function startSubmissionMonitoring() {
     
     // Also check on page load/navigation
     const checkOnLoad = () => {
-        setTimeout(() => {
+        setTimeout(async () => {
             if (checkForNewSubmissions()) {
                 const firstHighlightedRow = document.querySelector('table.status-frame-datatable tr.highlighted-row');
                 const submissionId = firstHighlightedRow.getAttribute('data-submission-id');
-                console.log('🎯 NEW SUBMISSION FOUND - Ready for next steps!');
-                console.log(`   Submission ID: ${submissionId}`);
+                console.log(submissionId);
+                const url = 'https://codeforces.com/api/user.status?handle=' + handle + '&from=1&count=10&includeSources=true';
+                const response = await fetch(url);
+                const data = await response.json();
+                if (data.status !== 'OK') {
+                    throw new Error(`Codeforces API error: ${data.comment || 'Unknown error'}`);
+                }
+                const submissions = data.result;
+                if (submissions.length > 0) {
+                    console.log(submissions[0].id, submissions[0].verdict, submissions[0].problem.name
+                    );
+                }
             }
         }, 2000);
     };

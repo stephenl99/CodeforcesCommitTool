@@ -17,10 +17,10 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('logout').addEventListener('click', logout);
     
     function loadCredentials() {
-        chrome.storage.sync.get(['githubUsername', 'githubRepo', 'githubToken'], function(result) {
-            if (result.githubUsername && result.githubToken) {
+        chrome.storage.sync.get(['githubUsername', 'githubRepo', 'githubToken', 'codeforcesHandle'], function(result) {
+            if (result.githubUsername && result.githubToken && result.codeforcesHandle) {
                 // User is logged in
-                showUserInfo(result.githubUsername, result.githubRepo, result.githubToken);
+                showUserInfo(result.githubUsername, result.githubRepo, result.githubToken, result.codeforcesHandle);
             } else {
                 // User needs to login
                 showLoginForm();
@@ -32,8 +32,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const username = document.getElementById('githubUsername').value.trim();
         const repo = document.getElementById('githubRepo').value.trim();
         const token = document.getElementById('githubToken').value.trim();
+        const handle = document.getElementById('codeforcesHandle').value.trim();
         
-        if (!username || !repo || !token) {
+        if (!username || !repo || !token || !handle) {
             showStatus('Please fill in all fields', 'error');
             return;
         }
@@ -48,21 +49,23 @@ document.addEventListener('DOMContentLoaded', function() {
         chrome.storage.sync.set({
             githubUsername: username,
             githubRepo: repo,
-            githubToken: token
+            githubToken: token,
+            codeforcesHandle: handle
         }, function() {
             if (chrome.runtime.lastError) {
                 showStatus('Error saving credentials: ' + chrome.runtime.lastError.message, 'error');
             } else {
                 showStatus('Credentials saved successfully!', 'success');
-                showUserInfo(username, repo, token);
+                showUserInfo(username, repo, token, handle);
             }
         });
     }
     
-    function showUserInfo(username, repo, token) {
+    function showUserInfo(username, repo, token, handle) {
         document.getElementById('displayUsername').textContent = username;
         document.getElementById('displayRepo').textContent = repo;
         document.getElementById('displayToken').textContent = token.substring(0, 10) + '...';
+        document.getElementById('displayHandle').textContent = handle;
         
         loginForm.style.display = 'none';
         userInfo.style.display = 'block';
@@ -76,10 +79,11 @@ document.addEventListener('DOMContentLoaded', function() {
     function editCredentials() {
         showLoginForm();
         // Pre-fill the form with current values
-        chrome.storage.sync.get(['githubUsername', 'githubRepo', 'githubToken'], function(result) {
+        chrome.storage.sync.get(['githubUsername', 'githubRepo', 'githubToken', 'codeforcesHandle'], function(result) {
             document.getElementById('githubUsername').value = result.githubUsername || '';
             document.getElementById('githubRepo').value = result.githubRepo || '';
             document.getElementById('githubToken').value = result.githubToken || '';
+            document.getElementById('codeforcesHandle').value = result.codeforcesHandle || '';
         });
     }
     
@@ -91,6 +95,7 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('githubUsername').value = '';
             document.getElementById('githubRepo').value = '';
             document.getElementById('githubToken').value = '';
+            document.getElementById('codeforcesHandle').value = '';
         });
     }
     
