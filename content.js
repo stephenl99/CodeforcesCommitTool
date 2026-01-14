@@ -1,3 +1,16 @@
+// Prevent duplicate execution if script is injected multiple times
+(function() {
+    'use strict';
+    
+    if (window.__codeforcesExtensionLoaded) {
+        // Script already loaded, exit early
+        return;
+    }
+    
+    // Mark as loaded immediately to prevent duplicate execution
+    window.__codeforcesExtensionLoaded = true;
+
+// Variables
 let gitHubUsername = null;
 let repo = null;
 let gitHubToken = null;
@@ -412,37 +425,59 @@ function showSolutionSelectionModal(submissions) {
         left: 0;
         width: 100%;
         height: 100%;
-        background: rgba(0, 0, 0, 0.7);
+        background: rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(4px);
         z-index: 100000;
         display: flex;
         justify-content: center;
         align-items: center;
-        font-family: Arial, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        animation: fadeIn 0.2s ease;
     `;
+    
+    // Add fade-in animation
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+    `;
+    document.head.appendChild(style);
     
     // Create modal content
     const content = document.createElement('div');
     content.style.cssText = `
         background: white;
-        padding: 30px;
-        border-radius: 8px;
-        max-width: 600px;
-        max-height: 80vh;
+        padding: 32px;
+        border-radius: 16px;
+        max-width: 640px;
+        width: 90%;
+        max-height: 85vh;
         overflow-y: auto;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        animation: slideUp 0.3s ease;
     `;
     
     content.innerHTML = `
-        <h2 style="margin-top: 0; color: #333;">Select Solutions to Upload</h2>
-        <p style="color: #666; margin-bottom: 20px;">Choose which solutions you'd like to upload to GitHub:</p>
-        <div style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
-            <button id="select-all-btn" style="padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">Select All</button>
-            <span id="selected-count" style="color: #666; font-size: 14px;">0 selected</span>
+        <h2 style="margin: 0 0 8px 0; font-size: 24px; font-weight: 600; color: #1a1a1a; letter-spacing: -0.5px;">Select Solutions</h2>
+        <p style="color: #6b7280; font-size: 14px; margin-bottom: 24px; line-height: 1.5;">Choose which solutions to upload to GitHub</p>
+        <div style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; padding-bottom: 16px; border-bottom: 1px solid #e5e7eb;">
+            <button id="select-all-btn" style="padding: 10px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.2s; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);">Select All</button>
+            <span id="selected-count" style="color: #6b7280; font-size: 14px; font-weight: 500;">0 selected</span>
         </div>
-        <div id="submission-list" style="margin-bottom: 20px;"></div>
-        <div style="display: flex; gap: 10px; justify-content: flex-end;">
-            <button id="cancel-upload" style="padding: 10px 20px; background: #ccc; border: none; border-radius: 4px; cursor: pointer;">Cancel</button>
-            <button id="confirm-upload" style="padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Upload Selected</button>
+        <div id="submission-list" style="margin-bottom: 24px;"></div>
+        <div style="display: flex; gap: 12px; justify-content: flex-end;">
+            <button id="cancel-upload" style="padding: 12px 24px; background: #f3f4f6; color: #374151; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.2s;">Cancel</button>
+            <button id="confirm-upload" style="padding: 12px 24px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.2s; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);">Upload Selected</button>
         </div>
     `;
     
@@ -472,10 +507,11 @@ function showSolutionSelectionModal(submissions) {
             selectedSubmissions.clear();
             allCheckboxes.forEach(checkbox => {
                 checkbox.checked = false;
-                const submissionDiv = checkbox.closest('div[style*="padding: 15px"]');
+                const submissionDiv = checkbox.closest('div[style*="padding: 16px"]');
                 if (submissionDiv) {
-                    submissionDiv.style.borderColor = '#e0e0e0';
-                    submissionDiv.style.background = 'white';
+                    submissionDiv.style.borderColor = '#e5e7eb';
+                    submissionDiv.style.background = '#fafafa';
+                    submissionDiv.style.boxShadow = 'none';
                 }
             });
         } else {
@@ -485,10 +521,11 @@ function showSolutionSelectionModal(submissions) {
             });
             allCheckboxes.forEach(checkbox => {
                 checkbox.checked = true;
-                const submissionDiv = checkbox.closest('div[style*="padding: 15px"]');
+                const submissionDiv = checkbox.closest('div[style*="padding: 16px"]');
                 if (submissionDiv) {
-                    submissionDiv.style.borderColor = '#4CAF50';
-                    submissionDiv.style.background = '#f0f8f0';
+                    submissionDiv.style.borderColor = '#667eea';
+                    submissionDiv.style.background = 'linear-gradient(135deg, #f0f4ff 0%, #f5f3ff 100%)';
+                    submissionDiv.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.15)';
                 }
             });
         }
@@ -499,12 +536,13 @@ function showSolutionSelectionModal(submissions) {
     submissions.forEach((sub, index) => {
         const submissionDiv = document.createElement('div');
         submissionDiv.style.cssText = `
-            padding: 15px;
-            margin-bottom: 10px;
-            border: 2px solid #e0e0e0;
-            border-radius: 4px;
+            padding: 16px;
+            margin-bottom: 12px;
+            border: 1.5px solid #e5e7eb;
+            border-radius: 12px;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.2s ease;
+            background: #fafafa;
         `;
         
         const problemName = sub.problem.name || `Problem ${sub.problem.index || 'Unknown'}`;
@@ -517,19 +555,20 @@ function showSolutionSelectionModal(submissions) {
         const passedTests = sub.passedTestCount !== undefined ? sub.passedTestCount : null;
         
         submissionDiv.innerHTML = `
-            <label style="display: flex; align-items: center; cursor: pointer; width: 100%;">
-                <input type="checkbox" style="margin-right: 10px; width: 18px; height: 18px;" 
+            <label style="display: flex; align-items: flex-start; cursor: pointer; width: 100%; gap: 12px;">
+                <input type="checkbox" style="margin-top: 2px; width: 20px; height: 20px; cursor: pointer; accent-color: #667eea; flex-shrink: 0;" 
                        data-submission-id="${submissionId}"
                        data-contest-id="${contestId}"
                        data-problem-name="${problemName}"
                        data-language="${language}">
-                <div style="flex: 1;">
-                    <div style="font-weight: bold; color: #333; margin-bottom: 5px;">${problemName}</div>
-                    <div style="font-size: 12px; color: #666;">
-                        Contest ${contestId} • ${language} • ${submissionTime}
+                <div style="flex: 1; min-width: 0;">
+                    <div style="font-weight: 600; color: #1a1a1a; margin-bottom: 6px; font-size: 15px; letter-spacing: -0.2px;">${problemName}</div>
+                    <div style="font-size: 13px; color: #6b7280; margin-bottom: 4px; display: flex; flex-wrap: wrap; gap: 8px;">
+                        <span style="background: #f3f4f6; padding: 2px 8px; border-radius: 4px;">Contest ${contestId}</span>
+                        <span style="background: #f3f4f6; padding: 2px 8px; border-radius: 4px;">${language}</span>
                     </div>
-                    <div style="font-size: 11px; color: #888; margin-top: 3px;">
-                        Verdict: ${verdict}${points !== null ? ` • Points: ${points}` : ''}${passedTests !== null ? ` • Tests: ${passedTests}` : ''}
+                    <div style="font-size: 12px; color: #9ca3af; margin-top: 6px;">
+                        ${submissionTime}${verdict === 'OK' ? ' • <span style="color: #10b981; font-weight: 500;">✓ Accepted</span>' : ` • ${verdict}`}${points !== null ? ` • ${points} pts` : ''}${passedTests !== null ? ` • ${passedTests} tests` : ''}
                     </div>
                 </div>
             </label>
@@ -541,12 +580,14 @@ function showSolutionSelectionModal(submissions) {
         checkbox.addEventListener('change', (e) => {
             if (e.target.checked) {
                 selectedSubmissions.add(sub);
-                submissionDiv.style.borderColor = '#4CAF50';
-                submissionDiv.style.background = '#f0f8f0';
+                submissionDiv.style.borderColor = '#667eea';
+                submissionDiv.style.background = 'linear-gradient(135deg, #f0f4ff 0%, #f5f3ff 100%)';
+                submissionDiv.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.15)';
             } else {
                 selectedSubmissions.delete(sub);
-                submissionDiv.style.borderColor = '#e0e0e0';
-                submissionDiv.style.background = 'white';
+                submissionDiv.style.borderColor = '#e5e7eb';
+                submissionDiv.style.background = '#fafafa';
+                submissionDiv.style.boxShadow = 'none';
             }
             updateSelectedCount();
         });
@@ -561,27 +602,68 @@ function showSolutionSelectionModal(submissions) {
         listContainer.appendChild(submissionDiv);
     });
     
+    // Add hover effects to buttons
+    const cancelBtn = content.querySelector('#cancel-upload');
+    const confirmBtn = content.querySelector('#confirm-upload');
+    
+    selectAllBtn.addEventListener('mouseenter', () => {
+        selectAllBtn.style.transform = 'translateY(-1px)';
+        selectAllBtn.style.boxShadow = '0 6px 16px rgba(102, 126, 234, 0.4)';
+    });
+    selectAllBtn.addEventListener('mouseleave', () => {
+        selectAllBtn.style.transform = 'translateY(0)';
+        selectAllBtn.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.3)';
+    });
+    
+    cancelBtn.addEventListener('mouseenter', () => {
+        cancelBtn.style.background = '#e5e7eb';
+    });
+    cancelBtn.addEventListener('mouseleave', () => {
+        cancelBtn.style.background = '#f3f4f6';
+    });
+    
+    confirmBtn.addEventListener('mouseenter', () => {
+        confirmBtn.style.transform = 'translateY(-1px)';
+        confirmBtn.style.boxShadow = '0 6px 16px rgba(16, 185, 129, 0.4)';
+    });
+    confirmBtn.addEventListener('mouseleave', () => {
+        confirmBtn.style.transform = 'translateY(0)';
+        confirmBtn.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.3)';
+    });
+    
     // Handle cancel
-    content.querySelector('#cancel-upload').addEventListener('click', () => {
-        document.body.removeChild(modal);
+    cancelBtn.addEventListener('click', () => {
+        modal.style.animation = 'fadeOut 0.2s ease';
+        setTimeout(() => {
+            if (modal.parentNode) {
+                document.body.removeChild(modal);
+            }
+        }, 200);
     });
     
     // Handle confirm
-    content.querySelector('#confirm-upload').addEventListener('click', async () => {
+    confirmBtn.addEventListener('click', async () => {
         if (selectedSubmissions.size === 0) {
             showNotification('Please select at least one solution', 'error');
             return;
         }
         
-        content.querySelector('#confirm-upload').disabled = true;
-        content.querySelector('#confirm-upload').textContent = 'Uploading...';
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Uploading...';
+        confirmBtn.style.opacity = '0.7';
+        confirmBtn.style.cursor = 'not-allowed';
         
         // Upload each selected submission
         for (const sub of selectedSubmissions) {
             await uploadSubmissionToGitHub(sub);
         }
         
-        document.body.removeChild(modal);
+        modal.style.animation = 'fadeOut 0.2s ease';
+        setTimeout(() => {
+            if (modal.parentNode) {
+                document.body.removeChild(modal);
+            }
+        }, 200);
         showNotification(`✅ Uploaded ${selectedSubmissions.size} solution(s) to GitHub!`, 'success');
     });
 }
@@ -734,54 +816,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 });
 
-// Handle fetch submissions request from popup
-async function handleFetchSubmissionsRequest(count, fetchMax) {
-    // Load credentials if not already loaded
-    if (!handle || !apiKey || !apiSecret) {
-        const hasCredentials = await loadCredentials();
-        if (!hasCredentials) {
-            throw new Error('Please configure your Codeforces credentials in the extension popup');
-        }
-    }
-    
-    // Determine count - if max, use a large number (Codeforces API limit is typically 10000)
-    const apiCount = fetchMax ? 10000 : (count || 10);
-    
-    // Generate API signature
-    const rand = Math.floor(Math.random() * 900000) + 100000;
-    const time = Math.floor(Date.now() / 1000);
-    const apiSigString = rand + '/user.status?apiKey=' + apiKey + '&count=' + apiCount + '&from=1&handle=' + handle + '&includeSources=true&time=' + time + '#' + apiSecret;
-    const hash = await sha512hex(apiSigString);
-    const url = 'https://codeforces.com/api/user.status?handle=' + handle + '&from=1&count=' + apiCount + '&includeSources=true&apiKey=' + apiKey + '&time=' + time + '&apiSig=' + rand + hash;
-    const response = await fetch(url);
-    const data = await response.json();
-    
-    if (data.status !== 'OK') {
-        throw new Error(`Codeforces API error: ${data.comment || 'Unknown error'}`);
-    }
-    
-    const submissions = data.result;
-    if (submissions.length === 0) {
-        showNotification('No submissions found', 'info');
-        return { count: 0 };
-    }
-    
-    // Filter for accepted submissions only
-    const acceptedSubmissions = submissions.filter(sub => 
-        sub.verdict === 'OK' || sub.verdict === 'ACCEPTED'
-    );
-    
-    if (acceptedSubmissions.length === 0) {
-        showNotification('No accepted submissions found', 'info');
-        return { count: 0 };
-    }
-    
-    // Show modal with submissions
-    showSolutionSelectionModal(acceptedSubmissions);
-    
-    return { count: acceptedSubmissions.length };
-}
-
 // Initialize when on Codeforces
 if (window.location.href.includes("codeforces.com")) {
     loadLastProcessedSubmissionId().then(() => {
@@ -795,3 +829,5 @@ if (window.location.href.includes("codeforces.com")) {
         });
     });
 }
+
+})(); // End of IIFE wrapper

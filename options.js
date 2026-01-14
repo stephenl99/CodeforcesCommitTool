@@ -1,10 +1,10 @@
-// Popup script for user account management
+// Options page script (same logic as popup.js but for persistent page)
 document.addEventListener('DOMContentLoaded', function() {
     const loginForm = document.getElementById('loginForm');
     const userInfo = document.getElementById('userInfo');
     const status = document.getElementById('status');
     
-    // Load saved credentials on popup open
+    // Load saved credentials on page load
     loadCredentials();
     
     // Save credentials button
@@ -15,12 +15,6 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Logout button
     document.getElementById('logout').addEventListener('click', logout);
-    
-    // Open options page button (persistent page)
-    document.getElementById('openOptions').addEventListener('click', function() {
-        chrome.runtime.openOptionsPage();
-    });
-    
 
     // Setup fetch submissions handlers (button is in userInfo div which may be hidden)
     function setupFetchSubmissionsHandlers() {

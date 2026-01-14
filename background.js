@@ -207,9 +207,10 @@ async function handleFetchSubmissions(count, fetchMax, tabId) {
     
     // Inject content script to show modal (works on any page)
     try {
+        // Inject helpers.js first, then content.js (content.js depends on helpers.js)
         await chrome.scripting.executeScript({
             target: { tabId: tabId },
-            files: ['content.js']
+            files: ['helpers.js', 'content.js']
         });
         
         // Wait a bit for script to load, then send message
