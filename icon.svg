@@ -1,0 +1,7 @@
+<svg width="128" height="128" xmlns="http://www.w3.org/2000/svg">
+  <!-- Codeforces blue background -->
+  <rect width="128" height="128" fill="#3B5998" rx="20"/>
+  
+  <!-- White CF text -->
+  <text x="64" y="85" font-family="Arial, sans-serif" font-size="72" font-weight="bold" fill="white" text-anchor="middle">CF</text>
+</svg>
