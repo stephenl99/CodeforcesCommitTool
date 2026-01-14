@@ -2,6 +2,18 @@ let gitHubUsername = null;
 let repo = null;
 let gitHubToken = null;
 let handle = null; // Codeforces handle
+let apiKey = null; // Codeforces API key
+let apiSecret = null; // Codeforces API secret
+
+// SHA-512 hash function using Web Crypto API
+async function sha512hex(message) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(message);
+    const hashBuffer = await crypto.subtle.digest('SHA-512', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return hashHex;
+}
 
 function getFileExtension(language) {
     const extensions = {
@@ -72,7 +84,7 @@ function loadCredentials() {
         }
         
         try {
-            chrome.storage.sync.get(['githubUsername', 'githubRepo', 'githubToken', 'codeforcesHandle'], function(result) {
+            chrome.storage.sync.get(['githubUsername', 'githubRepo', 'githubToken', 'codeforcesHandle', 'apiKey', 'apiSecret'], function(result) {
                 if (chrome.runtime.lastError) {
                     console.error('❌ Extension context error loading credentials:', chrome.runtime.lastError.message);
                     console.log('Please reload the page and try again.');
@@ -80,16 +92,18 @@ function loadCredentials() {
                     return;
                 }
                 
-                if (result.githubUsername && result.githubToken && result.codeforcesHandle) {
+                if (result.githubUsername && result.githubToken && result.codeforcesHandle && result.apiKey && result.apiSecret) {
                     gitHubUsername = result.githubUsername;
                     repo = result.githubRepo || 'Codeforces';
                     gitHubToken = result.githubToken;
                     handle = result.codeforcesHandle;
+                    apiKey = result.apiKey;
+                    apiSecret = result.apiSecret;
                     console.log('Credentials loaded successfully');
                     console.log('Codeforces handle:', handle);
                     resolve(true);
                 } else {
-                    console.log('No credentials found. Please set up your GitHub credentials and Codeforces handle in the extension popup.');
+                    console.log('No credentials found. Please set up your GitHub credentials, Codeforces handle, and API key/secret in the extension popup.');
                     resolve(false);
                 }
             });
@@ -547,8 +561,12 @@ function startSubmissionMonitoring() {
             if (checkForNewSubmissions()) {
                 const firstHighlightedRow = document.querySelector('table.status-frame-datatable tr.highlighted-row');
                 const submissionId = firstHighlightedRow.getAttribute('data-submission-id');
+                const rand = Math.floor(Math.random() * 900000) + 100000;
                 console.log(submissionId);
-                const url = 'https://codeforces.com/api/user.status?handle=' + handle + '&from=1&count=10&includeSources=true';
+                const time = Math.floor(Date.now() / 1000); // Unix timestamp in seconds (replicates System.currentTimeMillis()/1000)
+                const apiSigString = rand + '/user.status?apiKey=' + apiKey + '&count=10&from=1&handle=' + handle + '&includeSources=true&time=' + time + '#' + apiSecret;
+                const hash = await sha512hex(apiSigString);
+                const url = 'https://codeforces.com/api/user.status?handle=' + handle + '&from=1&count=10&includeSources=true&apiKey=' + apiKey + '&time=' + time + '&apiSig=' + rand + hash;
                 const response = await fetch(url);
                 const data = await response.json();
                 if (data.status !== 'OK') {
@@ -556,8 +574,12 @@ function startSubmissionMonitoring() {
                 }
                 const submissions = data.result;
                 if (submissions.length > 0) {
-                    console.log(submissions[0].id, submissions[0].verdict, submissions[0].problem.name
-                    );
+                    console.log('First submission object:', submissions[0]);
+                    console.log('All fields of first submission:');
+                    for (const key in submissions[0]) {
+                        console.log(`  ${key}:`, submissions[0][key]);
+                    }
+                    console.log(atob(submissions[0].sourceBase64))
                 }
             }
         }, 2000);
