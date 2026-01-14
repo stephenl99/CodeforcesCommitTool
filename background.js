@@ -18,15 +18,45 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 async function handleGitHubUpload(data) {
     const { filename, code, username, token, commitMsg, sha, repo } = data;
     
-    let url = `https://api.github.com/repos/${username}/${repo}/contents/${filename}`;
+    // URL encode the filename to handle special characters
+    const encodedFilename = encodeURIComponent(filename);
+    let url = `https://api.github.com/repos/${username}/${repo}/contents/${encodedFilename}`;
+    
+    // If SHA not provided, check if file exists to get SHA for update
+    let fileSha = sha;
+    if (!fileSha) {
+        try {
+            const checkResponse = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `token ${token}`,
+                    'Accept': 'application/vnd.github.v3+json'
+                }
+            });
+            
+            if (checkResponse.ok) {
+                const fileData = await checkResponse.json();
+                fileSha = fileData.sha;
+            } else if (checkResponse.status !== 404) {
+                // If it's not a 404, there's a real error
+                const error = await checkResponse.json().catch(() => ({}));
+                throw new Error(`GitHub API error checking file: ${checkResponse.status} - ${JSON.stringify(error)}`);
+            }
+            // 404 is fine - file doesn't exist, we'll create it
+        } catch (error) {
+            // If check fails, continue anyway - might be a new file
+            console.log('Could not check file existence, proceeding with upload:', error.message);
+        }
+    }
+    
     let requestData = {
         message: commitMsg,
         content: code,
         branch: 'main'
     };
     
-    if (sha) {
-        requestData.sha = sha;
+    if (fileSha) {
+        requestData.sha = fileSha;
     }
     
     const response = await fetch(url, {
@@ -44,7 +74,19 @@ async function handleGitHubUpload(data) {
         return result;
     } else {
         const error = await response.json();
-        throw new Error(`GitHub API error: ${response.status} - ${JSON.stringify(error)}`);
+        let errorMessage = `GitHub API error: ${response.status}`;
+        
+        if (response.status === 403) {
+            errorMessage += '\n\n❌ Permission denied. Please check:\n';
+            errorMessage += '1. Your token has the "repo" scope (for private repos) or "public_repo" scope (for public repos)\n';
+            errorMessage += '2. The repository exists and you have access to it\n';
+            errorMessage += '3. The token is not expired\n';
+            errorMessage += `\nError details: ${JSON.stringify(error)}`;
+        } else {
+            errorMessage += ` - ${JSON.stringify(error)}`;
+        }
+        
+        throw new Error(errorMessage);
     }
 }
 

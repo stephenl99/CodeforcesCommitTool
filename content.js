@@ -127,42 +127,9 @@ async function uploadToGitHub(filename, code, commitMsg, sha = null) {
     
     const base64Code = btoa(unescape(encodeURIComponent(code)));
     
-    // Check if file exists
-    try {
-        const response = await fetch(`https://api.github.com/repos/${gitHubUsername}/${repo}/contents/${filename}`, {
-            method: 'GET',
-            headers: {
-                'Authorization': `token ${gitHubToken}`,
-                'Accept': 'application/vnd.github.v3+json'
-            }
-        });
-        
-        if (response.ok) {
-            const fileData = await response.json();
-            sha = fileData.sha;
-            
-            const shouldOverwrite = confirm(
-                `🔄 Overwrite Existing Solution?\n\n` +
-                `A solution for "${filename}" already exists in your GitHub repository.\n\n` +
-                `Do you want to overwrite it with your new submission?\n\n` +
-                `✅ Click OK to overwrite\n` +
-                `❌ Click Cancel to skip`
-            );
-            
-            if (!shouldOverwrite) {
-                console.log('User chose not to overwrite existing solution. Skipping upload.');
-                showNotification('⏭️ Skipped upload - existing solution preserved', 'info');
-                return false;
-            }
-            
-            showNotification('🔄 Overwriting existing solution...', 'info');
-        } else if (response.status === 404) {
-            console.log('File does not exist (404), creating new file');
-            showNotification('📝 Creating new solution file...', 'info');
-        }
-    } catch (error) {
-        console.log('Error checking for existing file:', error);
-    }
+    // Check if file exists (skip this check and let background script handle it)
+    // We'll let the background script handle the file check to avoid CORS and permission issues
+    // sha parameter is already available from function signature
     
     // Send to background script to avoid CORS
     if (!isExtensionContextValid()) {
@@ -407,11 +374,14 @@ function showSolutionSelectionModal(submissions) {
             transition: all 0.2s;
         `;
         
-        const problemName = sub.problem.name || `Problem ${sub.problem.index}`;
+        const problemName = sub.problem.name || `Problem ${sub.problem.index || 'Unknown'}`;
         const contestId = sub.contestId || 'Unknown';
         const submissionId = sub.id;
         const language = sub.programmingLanguage || 'Unknown';
-        const submissionTime = new Date(sub.creationTimeSeconds * 1000).toLocaleString();
+        const verdict = sub.verdict || 'Unknown';
+        const submissionTime = sub.creationTimeSeconds ? new Date(sub.creationTimeSeconds * 1000).toLocaleString() : 'Unknown';
+        const points = sub.points !== undefined ? sub.points : null;
+        const passedTests = sub.passedTestCount !== undefined ? sub.passedTestCount : null;
         
         submissionDiv.innerHTML = `
             <label style="display: flex; align-items: center; cursor: pointer; width: 100%;">
@@ -424,6 +394,9 @@ function showSolutionSelectionModal(submissions) {
                     <div style="font-weight: bold; color: #333; margin-bottom: 5px;">${problemName}</div>
                     <div style="font-size: 12px; color: #666;">
                         Contest ${contestId} • ${language} • ${submissionTime}
+                    </div>
+                    <div style="font-size: 11px; color: #888; margin-top: 3px;">
+                        Verdict: ${verdict}${points !== null ? ` • Points: ${points}` : ''}${passedTests !== null ? ` • Tests: ${passedTests}` : ''}
                     </div>
                 </div>
             </label>
@@ -478,24 +451,36 @@ function showSolutionSelectionModal(submissions) {
 }
 
 async function uploadSubmissionToGitHub(submission) {
-    // Fetch the actual code for this submission
-    const code = await fetchSubmissionCodeFromAPI(submission);
-    if (!code) {
-        console.error('Could not fetch code for submission:', submission.id);
-        return false;
+    // Get source code from API response (sourceBase64 field)
+    let code = null;
+    if (submission.sourceBase64) {
+        try {
+            code = atob(submission.sourceBase64);
+        } catch (error) {
+            console.error('Error decoding sourceBase64:', error);
+            return false;
+        }
+    } else {
+        // Fallback: try to fetch from submission page if sourceBase64 not available
+        code = await fetchSubmissionCodeFromAPI(submission);
+        if (!code) {
+            console.error('Could not get code for submission:', submission.id);
+            return false;
+        }
     }
     
-    const problemName = submission.problem.name || `Problem${submission.problem.index}`;
-    const contestId = submission.contestId;
-    const language = submission.programmingLanguage;
+    const problemName = submission.problem.name || `Problem ${submission.problem.index}`;
+    const contestId = submission.contestId || 'Unknown';
+    const language = submission.programmingLanguage || 'Unknown';
+    const verdict = submission.verdict || 'Unknown';
     
     // Format filename
     const sanitizedProblemName = problemName.replace(/[^a-zA-Z0-9]/g, '_');
     const extension = getFileExtension(language);
     const filename = `${contestId}_${sanitizedProblemName}.${extension}`;
     
-    // Create commit message
-    const commitMsg = `Add solution for ${problemName} (Contest ${contestId})`;
+    // Create commit message with more details
+    const commitMsg = `Add solution for ${problemName} (Contest ${contestId}, ${verdict})`;
     
     // Upload to GitHub
     const success = await uploadToGitHub(filename, code, commitMsg);
@@ -574,12 +559,16 @@ function startSubmissionMonitoring() {
                 }
                 const submissions = data.result;
                 if (submissions.length > 0) {
-                    console.log('First submission object:', submissions[0]);
-                    console.log('All fields of first submission:');
-                    for (const key in submissions[0]) {
-                        console.log(`  ${key}:`, submissions[0][key]);
+                    // Filter for accepted submissions only
+                    const acceptedSubmissions = submissions.filter(sub => 
+                        sub.verdict === 'OK' || sub.verdict === 'ACCEPTED'
+                    );
+                    
+                    if (acceptedSubmissions.length > 0) {
+                        showSolutionSelectionModal(acceptedSubmissions);
+                    } else {
+                        console.log('No accepted submissions found');
                     }
-                    console.log(atob(submissions[0].sourceBase64))
                 }
             }
         }, 2000);
