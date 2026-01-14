@@ -16,6 +16,38 @@ document.addEventListener('DOMContentLoaded', function() {
     // Logout button
     document.getElementById('logout').addEventListener('click', logout);
     
+
+    // Setup fetch submissions handlers (button is in userInfo div which may be hidden)
+    function setupFetchSubmissionsHandlers() {
+        const fetchSubmissionsBtn = document.getElementById('fetchSubmissions');
+        
+        if (fetchSubmissionsBtn && !fetchSubmissionsBtn.hasAttribute('data-listener-attached')) {
+            fetchSubmissionsBtn.addEventListener('click', function(e) {
+                fetchSubmissions();
+            });
+            fetchSubmissionsBtn.setAttribute('data-listener-attached', 'true');
+        }
+        
+        const fetchMaxCheckbox = document.getElementById('fetchMax');
+        if (fetchMaxCheckbox && !fetchMaxCheckbox.hasAttribute('data-listener-attached')) {
+            fetchMaxCheckbox.addEventListener('change', function() {
+                const countInput = document.getElementById('submissionCount');
+                if (countInput) {
+                    countInput.disabled = this.checked;
+                    if (this.checked) {
+                        countInput.value = '';
+                    } else {
+                        countInput.value = '10';
+                    }
+                }
+            });
+            fetchMaxCheckbox.setAttribute('data-listener-attached', 'true');
+        }
+    }
+    
+    // Try to setup handlers immediately (in case userInfo is already visible)
+    setupFetchSubmissionsHandlers();
+    
     function loadCredentials() {
         chrome.storage.sync.get(['githubUsername', 'githubRepo', 'githubToken', 'codeforcesHandle', 'apiKey', 'apiSecret'], function(result) {
             if (result.githubUsername && result.githubToken && result.codeforcesHandle && result.apiKey && result.apiSecret) {
@@ -75,6 +107,12 @@ document.addEventListener('DOMContentLoaded', function() {
         
         loginForm.style.display = 'none';
         userInfo.style.display = 'block';
+        
+        // Setup fetch submissions handlers now that userInfo is visible
+        setupFetchSubmissionsHandlers();
+        
+        // Setup fetch submissions handlers now that userInfo is visible
+        setupFetchSubmissionsHandlers();
     }
     
     function showLoginForm() {
@@ -118,5 +156,72 @@ document.addEventListener('DOMContentLoaded', function() {
         setTimeout(function() {
             status.style.display = 'none';
         }, 3000);
+    }
+    
+    function fetchSubmissions() {
+        const fetchMaxCheckbox = document.getElementById('fetchMax');
+        const countInput = document.getElementById('submissionCount');
+        const fetchStatus = document.getElementById('fetchStatus');
+        
+        if (!fetchMaxCheckbox || !countInput || !fetchStatus) {
+            return;
+        }
+        
+        const fetchMax = fetchMaxCheckbox.checked;
+        let count = null;
+        
+        if (!fetchMax) {
+            count = parseInt(countInput.value, 10);
+            if (isNaN(count) || count < 1) {
+                fetchStatus.textContent = 'Please enter a valid number of submissions';
+                fetchStatus.className = 'status error';
+                fetchStatus.style.display = 'block';
+                setTimeout(() => {
+                    fetchStatus.style.display = 'none';
+                }, 3000);
+                return;
+            }
+        }
+        
+        // Get active tab (works from any page)
+        chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+            if (tabs.length === 0) {
+                fetchStatus.textContent = 'Could not find active tab';
+                fetchStatus.className = 'status error';
+                fetchStatus.style.display = 'block';
+                return;
+            }
+            
+            const currentTab = tabs[0];
+            
+            // Fetch submissions via background script (works from any page)
+            fetchStatus.textContent = 'Fetching submissions...';
+            fetchStatus.className = 'status';
+            fetchStatus.style.display = 'block';
+            
+            chrome.runtime.sendMessage({
+                action: 'fetchSubmissions',
+                count: count,
+                max: fetchMax,
+                tabId: currentTab.id
+            }, function(response) {
+                if (chrome.runtime.lastError) {
+                    fetchStatus.textContent = 'Error: ' + chrome.runtime.lastError.message;
+                    fetchStatus.className = 'status error';
+                } else if (response && response.success) {
+                    fetchStatus.textContent = `✅ Fetched ${response.count || 'all'} submissions`;
+                    fetchStatus.className = 'status success';
+                    setTimeout(() => {
+                        fetchStatus.style.display = 'none';
+                    }, 3000);
+                } else {
+                    fetchStatus.textContent = response?.error || 'Failed to fetch submissions';
+                    fetchStatus.className = 'status error';
+                    setTimeout(() => {
+                        fetchStatus.style.display = 'none';
+                    }, 3000);
+                }
+            });
+        });
     }
 });

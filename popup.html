@@ -65,6 +65,34 @@
         .logout-btn:hover {
             background-color: #c82333;
         }
+        input[type="number"] {
+            width: 100px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        input[type="checkbox"] {
+            width: auto;
+            margin-right: 5px;
+        }
+        .fetch-section {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+        }
+        .fetch-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .fetch-btn {
+            background-color: #28a745;
+        }
+        .fetch-btn:hover {
+            background-color: #218838;
+        }
     </style>
 </head>
 <body>
@@ -130,6 +158,23 @@
             <p><strong>API Key:</strong> <span id="displayApiKey"></span></p>
             <p><strong>API Secret:</strong> <span id="displayApiSecret"></span></p>
         </div>
+        
+        <div class="fetch-section">
+            <h3 style="margin-top: 0;">Fetch Submissions</h3>
+            <div class="fetch-controls">
+                <label>
+                    <input type="number" id="submissionCount" min="1" value="10" style="width: 80px;">
+                    submissions
+                </label>
+                <label style="display: flex; align-items: center;">
+                    <input type="checkbox" id="fetchMax">
+                    Max (scan all)
+                </label>
+            </div>
+            <button id="fetchSubmissions" class="fetch-btn">Fetch Submissions</button>
+            <div id="fetchStatus" class="status" style="margin-top: 10px;"></div>
+        </div>
+        
         <button id="editCredentials" class="logout-btn">Edit Credentials</button>
         <button id="logout" class="logout-btn">Logout</button>
     </div>

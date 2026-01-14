@@ -3,7 +3,7 @@
 "name": "Codeforces to Github Extension",
 "description": "This extension turns every Codeforces submission you make into a Github file",
 "version": "1.1",
-"permissions": ["activeTab", "storage"],
+"permissions": ["activeTab", "storage", "tabs", "scripting"],
 "host_permissions": ["https://api.github.com/*", "https://github.com/*", "https://codeforces.com/*"],
 "background": {
     "service_worker": "background.js"

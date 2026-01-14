@@ -13,6 +13,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             .catch(error => sendResponse({ success: false, error: error.message }));
         return true; // Keep message channel open for async response
     }
+    
+    if (request.action === 'fetchSubmissions') {
+        handleFetchSubmissions(request.count, request.max, request.tabId)
+            .then(result => sendResponse({ success: true, count: result.count }))
+            .catch(error => sendResponse({ success: false, error: error.message }));
+        return true; // Keep message channel open for async response
+    }
 });
 
 async function handleGitHubUpload(data) {
@@ -142,4 +149,85 @@ async function handleFetchSubmissionCode(url) {
         console.error('Error fetching submission code:', error);
         throw error;
     }
+}
+
+// SHA-512 hash function using Web Crypto API
+async function sha512hex(message) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(message);
+    const hashBuffer = await crypto.subtle.digest('SHA-512', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return hashHex;
+}
+
+// Handle fetch submissions request (works from any page)
+async function handleFetchSubmissions(count, fetchMax, tabId) {
+    // Get credentials from storage
+    const result = await chrome.storage.sync.get(['codeforcesHandle', 'apiKey', 'apiSecret']);
+    
+    if (!result.codeforcesHandle || !result.apiKey || !result.apiSecret) {
+        throw new Error('Please configure your Codeforces credentials in the extension popup');
+    }
+    
+    const handle = result.codeforcesHandle;
+    const apiKey = result.apiKey;
+    const apiSecret = result.apiSecret;
+    
+    // Determine count - if max, use a large number (Codeforces API limit is typically 10000)
+    const apiCount = fetchMax ? 10000 : (count || 10);
+    
+    // Generate API signature
+    const rand = Math.floor(Math.random() * 900000) + 100000;
+    const time = Math.floor(Date.now() / 1000);
+    const apiSigString = rand + '/user.status?apiKey=' + apiKey + '&count=' + apiCount + '&from=1&handle=' + handle + '&includeSources=true&time=' + time + '#' + apiSecret;
+    const hash = await sha512hex(apiSigString);
+    const url = 'https://codeforces.com/api/user.status?handle=' + handle + '&from=1&count=' + apiCount + '&includeSources=true&apiKey=' + apiKey + '&time=' + time + '&apiSig=' + rand + hash;
+    
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    if (data.status !== 'OK') {
+        throw new Error(`Codeforces API error: ${data.comment || 'Unknown error'}`);
+    }
+    
+    const submissions = data.result;
+    if (submissions.length === 0) {
+        return { count: 0 };
+    }
+    
+    // Filter for accepted submissions only
+    const acceptedSubmissions = submissions.filter(sub => 
+        sub.verdict === 'OK' || sub.verdict === 'ACCEPTED'
+    );
+    
+    if (acceptedSubmissions.length === 0) {
+        return { count: 0 };
+    }
+    
+    // Inject content script to show modal (works on any page)
+    try {
+        await chrome.scripting.executeScript({
+            target: { tabId: tabId },
+            files: ['content.js']
+        });
+        
+        // Wait a bit for script to load, then send message
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        chrome.tabs.sendMessage(tabId, {
+            action: 'showSolutionModal',
+            submissions: acceptedSubmissions
+        });
+    } catch (error) {
+        // If injection fails, try sending message anyway (script might already be loaded)
+        chrome.tabs.sendMessage(tabId, {
+            action: 'showSolutionModal',
+            submissions: acceptedSubmissions
+        }).catch(() => {
+            throw new Error('Could not inject content script. Please refresh the page and try again.');
+        });
+    }
+    
+    return { count: acceptedSubmissions.length };
 }

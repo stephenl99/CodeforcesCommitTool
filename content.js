@@ -16,27 +16,117 @@ async function sha512hex(message) {
 }
 
 function getFileExtension(language) {
+    if (!language) return 'txt';
+    
+    // Normalize language string (case-insensitive, trim whitespace)
+    const normalizedLang = language.trim();
+    
     const extensions = {
-        'Java': 'java',
-        'Python': 'py',
-        'Python3': 'py',
-        'C++': 'cpp',
-        'C': 'c',
-        'JavaScript': 'js',
-        'TypeScript': 'ts',
-        'Go': 'go',
-        'Ruby': 'rb',
-        'Swift': 'swift',
-        'Kotlin': 'kt',
-        'Rust': 'rs',
-        'PHP': 'php',
-        'C#': 'cs',
-        'Scala': 'scala',
-        'Dart': 'dart',
-        'Elixir': 'ex',
-        'Erlang': 'erl'
+        // Java
+        'java': 'java',
+        'java 8': 'java',
+        'java 11': 'java',
+        'java 17': 'java',
+        
+        // Python
+        'python': 'py',
+        'python 2': 'py',
+        'python 3': 'py',
+        'python3': 'py',
+        'pypy': 'py',
+        'pypy 2': 'py',
+        'pypy 3': 'py',
+        'pypy3': 'py',
+        
+        // C/C++
+        'c++': 'cpp',
+        'c++14': 'cpp',
+        'c++17': 'cpp',
+        'c++20': 'cpp',
+        'g++': 'cpp',
+        'ms c++': 'cpp',
+        'c': 'c',
+        'gnu c': 'c',
+        'gnu c11': 'c',
+        'gnu c17': 'c',
+        
+        // JavaScript/TypeScript
+        'javascript': 'js',
+        'node.js': 'js',
+        'typescript': 'ts',
+        
+        // Go
+        'go': 'go',
+        
+        // Ruby
+        'ruby': 'rb',
+        
+        // Swift
+        'swift': 'swift',
+        
+        // Kotlin
+        'kotlin': 'kt',
+        
+        // Rust
+        'rust': 'rs',
+        
+        // PHP
+        'php': 'php',
+        
+        // C#
+        'c#': 'cs',
+        'mono c#': 'cs',
+        '.net': 'cs',
+        
+        // Scala
+        'scala': 'scala',
+        
+        // Dart
+        'dart': 'dart',
+        
+        // Elixir
+        'elixir': 'ex',
+        
+        // Erlang
+        'erlang': 'erl',
+        
+        // Other languages
+        'haskell': 'hs',
+        'ocaml': 'ml',
+        'pascal': 'pas',
+        'delphi': 'pas',
+        'perl': 'pl',
+        'clojure': 'clj',
+        'common lisp': 'lisp',
+        'scheme': 'scm',
+        'd': 'd',
+        'nim': 'nim',
+        'zig': 'zig',
+        'crystal': 'cr',
+        'julia': 'jl',
+        'octave': 'm',
+        'matlab': 'm',
+        'r': 'r',
+        'bash': 'sh',
+        'shell': 'sh'
     };
-    return extensions[language] || 'txt';
+    
+    // Try exact match (case-insensitive)
+    const lowerLang = normalizedLang.toLowerCase();
+    if (extensions[lowerLang]) {
+        return extensions[lowerLang];
+    }
+    
+    // Try partial matches
+    for (const [key, ext] of Object.entries(extensions)) {
+        if (lowerLang.includes(key) || key.includes(lowerLang)) {
+            return ext;
+        }
+    }
+    
+    // Default fallback
+    console.warn(`Unknown language "${language}", using .txt extension`);
+    return 'txt';
 }
 
 function isExtensionContextValid() {
@@ -244,10 +334,6 @@ function checkForNewSubmissions() {
     
     // Check if the current submission ID is greater than the last processed
     if (currentSubmissionId > lastProcessedSubmissionId) {
-        console.log(`✅ NEW SUBMISSION DETECTED!`);
-        console.log(`   Last processed: ${lastProcessedSubmissionId}`);
-        console.log(`   Current submission ID: ${currentSubmissionId}`);
-        console.log(`   Submission row:`, firstHighlightedRow);
         return true;
     }
     
@@ -349,6 +435,10 @@ function showSolutionSelectionModal(submissions) {
     content.innerHTML = `
         <h2 style="margin-top: 0; color: #333;">Select Solutions to Upload</h2>
         <p style="color: #666; margin-bottom: 20px;">Choose which solutions you'd like to upload to GitHub:</p>
+        <div style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+            <button id="select-all-btn" style="padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">Select All</button>
+            <span id="selected-count" style="color: #666; font-size: 14px;">0 selected</span>
+        </div>
         <div id="submission-list" style="margin-bottom: 20px;"></div>
         <div style="display: flex; gap: 10px; justify-content: flex-end;">
             <button id="cancel-upload" style="padding: 10px 20px; background: #ccc; border: none; border-radius: 4px; cursor: pointer;">Cancel</button>
@@ -362,6 +452,49 @@ function showSolutionSelectionModal(submissions) {
     // Populate submission list
     const listContainer = content.querySelector('#submission-list');
     const selectedSubmissions = new Set();
+    const selectAllBtn = content.querySelector('#select-all-btn');
+    const selectedCountSpan = content.querySelector('#selected-count');
+    let allCheckboxes = [];
+    
+    // Function to update selected count display
+    function updateSelectedCount() {
+        const count = selectedSubmissions.size;
+        selectedCountSpan.textContent = `${count} selected`;
+        selectAllBtn.textContent = count === submissions.length ? 'Deselect All' : 'Select All';
+    }
+    
+    // Select All button handler
+    selectAllBtn.addEventListener('click', () => {
+        const allSelected = selectedSubmissions.size === submissions.length;
+        
+        if (allSelected) {
+            // Deselect all
+            selectedSubmissions.clear();
+            allCheckboxes.forEach(checkbox => {
+                checkbox.checked = false;
+                const submissionDiv = checkbox.closest('div[style*="padding: 15px"]');
+                if (submissionDiv) {
+                    submissionDiv.style.borderColor = '#e0e0e0';
+                    submissionDiv.style.background = 'white';
+                }
+            });
+        } else {
+            // Select all
+            submissions.forEach(sub => {
+                selectedSubmissions.add(sub);
+            });
+            allCheckboxes.forEach(checkbox => {
+                checkbox.checked = true;
+                const submissionDiv = checkbox.closest('div[style*="padding: 15px"]');
+                if (submissionDiv) {
+                    submissionDiv.style.borderColor = '#4CAF50';
+                    submissionDiv.style.background = '#f0f8f0';
+                }
+            });
+        }
+        
+        updateSelectedCount();
+    });
     
     submissions.forEach((sub, index) => {
         const submissionDiv = document.createElement('div');
@@ -403,6 +536,8 @@ function showSolutionSelectionModal(submissions) {
         `;
         
         const checkbox = submissionDiv.querySelector('input[type="checkbox"]');
+        allCheckboxes.push(checkbox);
+        
         checkbox.addEventListener('change', (e) => {
             if (e.target.checked) {
                 selectedSubmissions.add(sub);
@@ -413,6 +548,7 @@ function showSolutionSelectionModal(submissions) {
                 submissionDiv.style.borderColor = '#e0e0e0';
                 submissionDiv.style.background = 'white';
             }
+            updateSelectedCount();
         });
         
         submissionDiv.addEventListener('click', (e) => {
@@ -524,11 +660,9 @@ function startSubmissionMonitoring() {
     // Monitor for new submissions using MutationObserver
     submissionObserver = new MutationObserver((mutations) => {
         if (checkForNewSubmissions()) {
-            // New submission detected - print message (you'll decide what to do next)
+            // New submission detected - trigger fetch
             const firstHighlightedRow = document.querySelector('table.status-frame-datatable tr.highlighted-row');
             const submissionId = firstHighlightedRow.getAttribute('data-submission-id');
-            console.log('🎯 NEW SUBMISSION FOUND - Ready for next steps!');
-            console.log(`   Submission ID: ${submissionId}`);
         }
     });
     
@@ -547,7 +681,6 @@ function startSubmissionMonitoring() {
                 const firstHighlightedRow = document.querySelector('table.status-frame-datatable tr.highlighted-row');
                 const submissionId = firstHighlightedRow.getAttribute('data-submission-id');
                 const rand = Math.floor(Math.random() * 900000) + 100000;
-                console.log(submissionId);
                 const time = Math.floor(Date.now() / 1000); // Unix timestamp in seconds (replicates System.currentTimeMillis()/1000)
                 const apiSigString = rand + '/user.status?apiKey=' + apiKey + '&count=10&from=1&handle=' + handle + '&includeSources=true&time=' + time + '#' + apiSecret;
                 const hash = await sha512hex(apiSigString);
@@ -566,8 +699,6 @@ function startSubmissionMonitoring() {
                     
                     if (acceptedSubmissions.length > 0) {
                         showSolutionSelectionModal(acceptedSubmissions);
-                    } else {
-                        console.log('No accepted submissions found');
                     }
                 }
             }
@@ -585,6 +716,70 @@ function startSubmissionMonitoring() {
             checkOnLoad();
         }
     }).observe(document, { subtree: true, childList: true });
+}
+
+// Message listener for popup requests
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    // Handle show solution modal (injected from background script)
+    if (request.action === 'showSolutionModal') {
+        showSolutionSelectionModal(request.submissions);
+        sendResponse({ success: true });
+        return true;
+    }
+    
+    // Ping handler to check if content script is loaded
+    if (request.action === 'ping') {
+        sendResponse({ success: true, loaded: true });
+        return true;
+    }
+});
+
+// Handle fetch submissions request from popup
+async function handleFetchSubmissionsRequest(count, fetchMax) {
+    // Load credentials if not already loaded
+    if (!handle || !apiKey || !apiSecret) {
+        const hasCredentials = await loadCredentials();
+        if (!hasCredentials) {
+            throw new Error('Please configure your Codeforces credentials in the extension popup');
+        }
+    }
+    
+    // Determine count - if max, use a large number (Codeforces API limit is typically 10000)
+    const apiCount = fetchMax ? 10000 : (count || 10);
+    
+    // Generate API signature
+    const rand = Math.floor(Math.random() * 900000) + 100000;
+    const time = Math.floor(Date.now() / 1000);
+    const apiSigString = rand + '/user.status?apiKey=' + apiKey + '&count=' + apiCount + '&from=1&handle=' + handle + '&includeSources=true&time=' + time + '#' + apiSecret;
+    const hash = await sha512hex(apiSigString);
+    const url = 'https://codeforces.com/api/user.status?handle=' + handle + '&from=1&count=' + apiCount + '&includeSources=true&apiKey=' + apiKey + '&time=' + time + '&apiSig=' + rand + hash;
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    if (data.status !== 'OK') {
+        throw new Error(`Codeforces API error: ${data.comment || 'Unknown error'}`);
+    }
+    
+    const submissions = data.result;
+    if (submissions.length === 0) {
+        showNotification('No submissions found', 'info');
+        return { count: 0 };
+    }
+    
+    // Filter for accepted submissions only
+    const acceptedSubmissions = submissions.filter(sub => 
+        sub.verdict === 'OK' || sub.verdict === 'ACCEPTED'
+    );
+    
+    if (acceptedSubmissions.length === 0) {
+        showNotification('No accepted submissions found', 'info');
+        return { count: 0 };
+    }
+    
+    // Show modal with submissions
+    showSolutionSelectionModal(acceptedSubmissions);
+    
+    return { count: acceptedSubmissions.length };
 }
 
 // Initialize when on Codeforces
